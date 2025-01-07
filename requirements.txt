@@ -1,0 +1,7 @@
+flask==3.0.0
+flask-socketio==5.3.6
+python-socketio==5.10.0
+netifaces==0.11.0
+python-magic==0.4.27
+qrcode==7.4.2
+Pillow==10.2.0 

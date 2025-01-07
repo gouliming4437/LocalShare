@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalShare - File Sharing</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8 text-blue-600">LocalShare</h1>
+        
+        <!-- Device Name Input -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Your Device</h2>
+            <div class="flex space-x-4">
+                <input type="text" id="deviceName" placeholder="Enter device name" class="flex-1 p-2 border rounded-lg">
+                <button onclick="updateDeviceName()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                    Update Name
+                </button>
+            </div>
+        </div>
+        
+        <!-- Connected Devices -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Connected Devices</h2>
+            <div id="deviceList" class="space-y-2">
+                <!-- Devices will be listed here -->
+            </div>
+        </div>
+
+        <!-- File Upload -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Share Files</h2>
+            <div class="space-y-4">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Select Recipient</label>
+                    <select id="recipientDevice" class="mt-1 block w-full p-2 border rounded-lg">
+                        <option value="">Select a device...</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Upload Type</label>
+                    <div class="mt-1 flex space-x-4">
+                        <button type="button" id="fileTypeBtn" class="px-4 py-2 bg-blue-500 text-white rounded-lg">File</button>
+                        <button type="button" id="dirTypeBtn" class="px-4 py-2 border rounded-lg">Directory</button>
+                    </div>
+                </div>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center" id="dropZone">
+                    <input type="file" id="fileInput" class="hidden">
+                    <input type="file" id="dirInput" class="hidden" webkitdirectory directory>
+                    <label id="uploadLabel" class="cursor-pointer block w-full h-full">
+                        <div class="text-gray-600">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <p class="mt-1" id="dropText">Drop files here or click to upload</p>
+                        </div>
+                    </label>
+                </div>
+                <div id="transferProgress" class="hidden">
+                    <div class="mb-2 flex justify-between text-sm">
+                        <span id="transferFileName"></span>
+                        <span id="transferPercent">0%</span>
+                    </div>
+                    <div class="bg-blue-100 rounded-full">
+                        <div class="bg-blue-500 rounded-full h-2 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Settings -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Download Settings</h2>
+            <div class="space-y-4">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Download Directory</label>
+                    <input type="file" id="downloadDirPicker" class="hidden" webkitdirectory directory>
+                    <div class="mt-1 flex space-x-2">
+                        <input type="text" id="downloadPath" readonly class="flex-1 p-2 border rounded-lg bg-gray-50" placeholder="Default downloads directory">
+                        <button onclick="document.getElementById('downloadDirPicker').click()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                            Choose
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transfer List -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">Transfers</h2>
+            <div id="transferList" class="space-y-2">
+                <!-- Transfers will be listed here -->
+            </div>
+        </div>
+
+        <!-- Add this after the LocalShare title, inside the container div -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Connect to this Device</h2>
+            {% if qr_code %}
+                <div class="flex flex-col items-center space-y-4">
+                    <p class="text-gray-600">Scan this QR code with your mobile device:</p>
+                    <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="w-48 h-48">
+                    <p class="text-sm text-gray-500">or visit:</p>
+                    <p class="text-blue-600 font-mono">{{ server_url }}</p>
+                </div>
+            {% else %}
+                <p class="text-gray-600">Could not generate QR code. Please check your network connection.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Transfer Request Modal -->
+    <div id="transferModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 class="text-lg font-semibold mb-4">File Transfer Request</h3>
+            <p id="transferMessage" class="mb-4"></p>
+            <div class="flex justify-end space-x-4">
+                <button onclick="respondToTransfer(false)" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors">
+                    Decline
+                </button>
+                <button onclick="respondToTransfer(true)" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                    Accept
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTransferRequest = null;
+        let currentUploadType = 'file';
+        let currentFileToSend = null;
+        let downloadDirectory = '';
+
+        const socket = io({
+            query: {
+                device_name: localStorage.getItem('deviceName') || `Device_${Math.random().toString(36).substr(2, 6)}`
+            }
+        });
+
+        // Get DOM elements
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const dirInput = document.getElementById('dirInput');
+        const deviceList = document.getElementById('deviceList');
+        const transferList = document.getElementById('transferList');
+        const transferProgress = document.getElementById('transferProgress');
+        const progressBar = transferProgress.querySelector('div div');
+        const transferFileName = document.getElementById('transferFileName');
+        const transferPercent = document.getElementById('transferPercent');
+        const recipientSelect = document.getElementById('recipientDevice');
+        const transferModal = document.getElementById('transferModal');
+        const transferMessage = document.getElementById('transferMessage');
+        const deviceNameInput = document.getElementById('deviceName');
+        const fileTypeBtn = document.getElementById('fileTypeBtn');
+        const dirTypeBtn = document.getElementById('dirTypeBtn');
+        const uploadLabel = document.getElementById('uploadLabel');
+        const dropText = document.getElementById('dropText');
+
+        // Initialize device name
+        deviceNameInput.value = localStorage.getItem('deviceName') || '';
+
+        function updateDeviceName() {
+            const newName = deviceNameInput.value.trim();
+            if (newName) {
+                localStorage.setItem('deviceName', newName);
+                location.reload();
+            }
+        }
+
+        // Set up upload type buttons
+        fileTypeBtn.addEventListener('click', () => toggleUploadType('file'));
+        dirTypeBtn.addEventListener('click', () => toggleUploadType('directory'));
+
+        function toggleUploadType(type) {
+            console.log('Toggling upload type to:', type);
+            currentUploadType = type;
+            
+            if (type === 'file') {
+                fileTypeBtn.classList.add('bg-blue-500', 'text-white');
+                fileTypeBtn.classList.remove('border');
+                dirTypeBtn.classList.remove('bg-blue-500', 'text-white');
+                dirTypeBtn.classList.add('border');
+                dropText.textContent = 'Drop files here or click to upload';
+                uploadLabel.onclick = () => fileInput.click();
+            } else {
+                dirTypeBtn.classList.add('bg-blue-500', 'text-white');
+                dirTypeBtn.classList.remove('border');
+                fileTypeBtn.classList.remove('bg-blue-500', 'text-white');
+                fileTypeBtn.classList.add('border');
+                dropText.textContent = 'Drop a directory here or click to upload';
+                uploadLabel.onclick = () => dirInput.click();
+            }
+            
+            // Clear existing files
+            fileInput.value = '';
+            dirInput.value = '';
+        }
+
+        // Initialize with file type
+        toggleUploadType('file');
+
+        // File input event listeners
+        fileInput.addEventListener('change', (e) => {
+            console.log('File selected:', e.target.files);
+            handleFiles(e.target.files, false);
+        });
+
+        dirInput.addEventListener('change', (e) => {
+            console.log('Directory selected:', e.target.files);
+            handleFiles(e.target.files, true);
+        });
+
+        // Drag and drop handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500');
+            const files = e.dataTransfer.files;
+            handleFiles(files, currentUploadType === 'directory');
+        });
+
+        function handleFiles(files, isDirectory = false) {
+            if (files.length === 0) return;
+            
+            const recipient = recipientSelect.value;
+            if (!recipient) {
+                showMessage('Please select a recipient first');
+                return;
+            }
+
+            console.log('Handling files:', files.length, 'isDirectory:', isDirectory);
+
+            if (isDirectory) {
+                const fileList = Array.from(files);
+                const directoryName = fileList[0].webkitRelativePath.split('/')[0];
+                
+                console.log('Directory upload:', {
+                    name: directoryName,
+                    files: fileList.length,
+                    paths: fileList.map(f => f.webkitRelativePath)
+                });
+
+                currentFileToSend = {
+                    files: fileList,
+                    isDirectory: true,
+                    directoryName: directoryName
+                };
+
+                socket.emit('file_transfer_request', {
+                    target: recipient,
+                    filename: directoryName,
+                    filesize: fileList.reduce((total, file) => total + file.size, 0),
+                    isDirectory: true,
+                    total_files: fileList.length
+                });
+            } else {
+                const file = files[0];
+                console.log('Single file upload:', file.name);
+                
+                currentFileToSend = {
+                    files: [file],
+                    isDirectory: false
+                };
+
+                socket.emit('file_transfer_request', {
+                    target: recipient,
+                    filename: file.name,
+                    filesize: file.size,
+                    isDirectory: false,
+                    total_files: 1
+                });
+            }
+        }
+
+        function uploadFile(files, transferId, isDirectory = false) {
+            const totalSize = files.reduce((total, file) => total + file.size, 0);
+            let uploadedSize = 0;
+
+            const uploadNext = (index) => {
+                if (index >= files.length) {
+                    console.log('All files uploaded');
+                    hideProgress();
+                    return;
+                }
+
+                const file = files[index];
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('transfer_id', transferId);
+                formData.append('relative_path', isDirectory ? file.webkitRelativePath : file.name);
+                formData.append('is_directory', isDirectory);
+
+                const xhr = new XMLHttpRequest();
+                
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const fileProgress = e.loaded;
+                        const totalProgress = ((uploadedSize + fileProgress) / totalSize) * 100;
+                        updateProgress(isDirectory ? 'Directory Upload' : file.name, Math.round(totalProgress));
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        uploadedSize += file.size;
+                        uploadNext(index + 1);
+                    } else {
+                        console.error('Upload failed:', xhr.responseText);
+                        showMessage('Upload failed: ' + xhr.responseText);
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('Upload error');
+                    showMessage('Upload error occurred');
+                };
+
+                xhr.open('POST', '/upload');
+                xhr.send(formData);
+            };
+
+            showProgress(isDirectory ? 'Directory Upload' : files[0].name, 0);
+            uploadNext(0);
+        }
+
+        // Socket event handlers
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('device_list', (devices) => {
+            deviceList.innerHTML = '';
+            recipientSelect.innerHTML = '<option value="">Select a device...</option>';
+            
+            Object.values(devices).forEach(device => {
+                if (device.id !== socket.id) {
+                    const deviceElement = document.createElement('div');
+                    deviceElement.className = 'p-3 bg-gray-50 rounded-lg';
+                    deviceElement.innerHTML = `
+                        <p class="font-medium">${device.name}</p>
+                        <p class="text-sm text-gray-600">IP: ${device.ip || 'Unknown'}</p>
+                    `;
+                    deviceList.appendChild(deviceElement);
+
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = `${device.name} (${device.ip || 'Unknown'})`;
+                    recipientSelect.appendChild(option);
+                }
+            });
+        });
+
+        socket.on('file_transfer_request', (data) => {
+            console.log('Received file transfer request:', data);
+            currentTransferRequest = data;
+            transferMessage.textContent = `${data.from_name} wants to send you "${data.filename}" (${formatFileSize(data.filesize)})`;
+            transferModal.classList.remove('hidden');
+        });
+
+        socket.on('file_transfer_accepted', (data) => {
+            console.log('File transfer accepted:', data);
+            if (currentFileToSend) {
+                uploadFile(currentFileToSend.files, data.transfer_id, currentFileToSend.isDirectory);
+            }
+        });
+
+        socket.on('file_transfer_rejected', (data) => {
+            console.log('File transfer rejected:', data);
+            showMessage('File transfer was rejected');
+            currentFileToSend = null;
+        });
+
+        socket.on('file_ready_for_download', (data) => {
+            console.log('File ready for download:', data);
+            
+            // Check if running on mobile
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            console.log('Is mobile device:', isMobile);
+            
+            if (data.is_directory) {
+                const downloadUrl = window.location.origin + data.download_url;
+                console.log('Starting directory download from:', downloadUrl);
+                
+                if (isMobile) {
+                    // For mobile devices, directly trigger the download
+                    window.location.href = downloadUrl;
+                    
+                    // Notify server after a delay
+                    setTimeout(() => {
+                        socket.emit('file_transfer_complete', {
+                            transfer_id: data.transfer_id
+                        });
+                    }, 2000);
+                } else {
+                    // Desktop handling with custom directory support
+                    const downloadUrlWithDir = downloadUrl + 
+                        (downloadDirectory ? `?download_dir=${encodeURIComponent(downloadDirectory)}` : '');
+                    
+                    console.log('Starting directory download to:', downloadDirectory || '~/Downloads');
+                    showProgress('Directory Download', 0);
+                    
+                    fetch(downloadUrlWithDir)
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(err => {
+                                    console.error('Server error:', err);
+                                    throw new Error(err.error || 'Server error');
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(result => {
+                            if (result.success) {
+                                updateProgress('Directory Download', 100);
+                                const message = [
+                                    `Directory downloaded successfully to:`,
+                                    result.path,
+                                    `Files copied: ${result.files_copied}`
+                                ].join('\n');
+                                showMessage(message);
+                                console.log('Download completed:', result);
+                            } else {
+                                throw new Error(result.error || 'Unknown error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Download error:', error);
+                            const errorMessage = error.message || error;
+                            showMessage('Error downloading directory:\n' + errorMessage);
+                        })
+                        .finally(() => {
+                            hideProgress();
+                            socket.emit('file_transfer_complete', {
+                                transfer_id: data.transfer_id
+                            });
+                        });
+                }
+            } else {
+                // Single file download remains the same
+                const downloadUrl = window.location.origin + data.download_url;
+                console.log('Starting file download from:', downloadUrl);
+                
+                if (isMobile) {
+                    window.location.href = downloadUrl;
+                } else {
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                
+                setTimeout(() => {
+                    socket.emit('file_transfer_complete', {
+                        transfer_id: data.transfer_id
+                    });
+                }, 2000);
+            }
+        });
+
+        // UI helper functions
+        function showProgress(filename, percent) {
+            transferProgress.classList.remove('hidden');
+            transferFileName.textContent = filename;
+            updateProgress(filename, percent);
+        }
+
+        function updateProgress(filename, percent) {
+            progressBar.style.width = `${percent}%`;
+            transferPercent.textContent = `${percent}%`;
+        }
+
+        function hideProgress() {
+            transferProgress.classList.add('hidden');
+        }
+
+        function showMessage(message) {
+            alert(message);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function respondToTransfer(accept) {
+            if (!currentTransferRequest) return;
+            
+            if (accept) {
+                socket.emit('file_transfer_accept', {
+                    transfer_id: currentTransferRequest.transfer_id
+                });
+            } else {
+                socket.emit('file_transfer_reject', {
+                    transfer_id: currentTransferRequest.transfer_id
+                });
+            }
+            
+            transferModal.classList.add('hidden');
+            currentTransferRequest = null;
+        }
+
+        // Download directory handling
+        const downloadDirPicker = document.getElementById('downloadDirPicker');
+        const downloadPath = document.getElementById('downloadPath');
+        
+        downloadDirPicker.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                downloadDirectory = e.target.files[0].path;
+                downloadPath.value = downloadDirectory;
+                localStorage.setItem('downloadDirectory', downloadDirectory);
+            }
+        });
+
+        const savedDownloadDir = localStorage.getItem('downloadDirectory');
+        if (savedDownloadDir) {
+            downloadDirectory = savedDownloadDir;
+            downloadPath.value = downloadDirectory;
+        }
+
+        socket.on('host_ip', (data) => {
+            document.getElementById('hostIp').textContent = data.ip;
+        });
+    </script>
+</body>
+</html> 
